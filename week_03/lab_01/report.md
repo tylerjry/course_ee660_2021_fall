@@ -16,7 +16,7 @@ tags:
 ## Executive Summary
 In this lab, our team create a DIV and MOD module for the LC4. We then designed an ALU module, which integrated the previously made LC4 division and modulo module and standard operands to complete basic ALU operations. 
 
-## Part A: DIV/MOD Module
+# Part A: DIV/MOD Module Code 
 As stated above, the first part of this assignment had us create a functioning division and modulo module. Written below is our Verilog code:
 
 ```Verilog
@@ -71,7 +71,7 @@ module lc4_divider_one_iter(DIVDI, DIVS, REMI, QUOI,
    assign DIVDO = DIVDI << 1;
 endmodule 
 ```
-
+# DIV/MOD Module Algorithm
 The module takes as input two 16-bit data values (dividend and divisor) and outputs two 16-bit values (remainder and quotient). It calculates using the following algorithm:
 
 ```Verilog
@@ -98,6 +98,29 @@ int divide(int dividend, int divisor)
   return quotient;
 }
 ```
-## Part B: ALU Module
+# Part B: ALU Module
 The LC4 ALU module performs all of the arithmetic and logical operations for the various instructions. In this lab you'll build a self-contained ALU datapath with the corresponding control signals.
 
+## ALU Schematic
+Below is a picture of our ALU Schematic
+
+![ALU_final_](https://user-images.githubusercontent.com/16892369/135794910-83c71d4c-06b7-4a0d-9984-67f5c112a52b.png)
+
+## ALU Verilog Code
+
+# Questions
+> Q: What other problems, if any, did you encounter while doing this lab?
+A: Our unfamiliarity with Verilog was the biggest general problem during this lab. While the concepts covered here were not difficult in after some thought, converting our knowledge with high-level, general-purpose programming to Verilog, a hardware based description language was more difficult than anticipated.
+
+> Q: How many hours did it take you to complete this assignment?
+A: An estimated total of ~60 hours were spend between the group to complete this assignment. Much of this time was spent figuring out the syntax of Verilog trying to get things to work properly. 
+
+> Q: On a scale of 1 (least) to 5 (most), how difficult was this assignment?
+A: 3.5 - 4
+
+> Q: What was the group division of labor on this assignment, in both hours and functional and debugging tasks?
+A: ... 
+Christian
+Devin: 
+Keola: 
+Tyler: Part A writing and debugging. 13 hours total writing 3 different instantiations of DIV/MOD module before settling with one, 2 hours debugging/troubleshooting.
