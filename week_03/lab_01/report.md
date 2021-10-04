@@ -17,7 +17,8 @@ tags:
 In this lab, our team create a DIV and MOD module for the LC4. We then designed an ALU module, which integrated the previously made LC4 division and modulo module and standard operands to complete basic ALU operations. 
 
 ## Part A: DIV/MOD Module
-As stated above, the first part of this assignment had us create a functioning division and modulo module. Written below is our Verilog code:
+As stated above, the first part of this assignment had us create a functioning division and modulo module. The module takes as input two 16-bit data values (dividend and divisor) and outputs two 16-bit values (remainder and quotient)
+Written below is our Verilog code:
 
 ```Verilog
 `timescale 1ns / 1ps
@@ -26,16 +27,17 @@ module lc4_divider(dividend_in, divisor_in, remainder_out, quotient_out);
 
    input [15:0] dividend_in, divisor_in;
    output [15:0] remainder_out, quotient_out;
-   // input clk;
    
    /*** YOUR CODE HERE ***/
    wire [15:0] dividend_in, divisor_in;
    wire [15:0] remainder_out, quotient_out;
    
+   // wires connecting modules to the input of the subsequent modules
    wire [15:0] d01, d02, d03, d04, d05, d06, d07, d08, d09, d10, d11, d12, d13, d14, d15, d_out;
    wire [15:0] r01, r02, r03, r04, r05, r06, r07, r08, r09, r10, r11, r12, r13, r14, r15, r_out;
    wire [15:0] q01, q02, q03, q04, q05, q06, q07, q08, q09, q10, q11, q12, q13, q14, q15, q_out;
-
+   
+   // instantiate 16 copies of the lc4_divider_one_iter module to perform a full 16-bit division
    lc4_divider_one_iter div_01(.DIVDI(dividend_in), .DIVS(divisor_in), .REMI(16'd0), .QUOI(16'd0), .DIVDO(d01), .REMO(r01), .QUOO(q01));
    lc4_divider_one_iter div_02(.DIVDI(d01), .DIVS(divisor_in), .REMI(r01), .QUOI(q01), .DIVDO(d02), .REMO(r02), .QUOO(q02));
    lc4_divider_one_iter div_03(.DIVDI(d02), .DIVS(divisor_in), .REMI(r02), .QUOI(q02), .DIVDO(d03), .REMO(r03), .QUOO(q03));
@@ -57,22 +59,23 @@ module lc4_divider(dividend_in, divisor_in, remainder_out, quotient_out);
    
 endmodule
 
+// 
 module lc4_divider_one_iter(DIVDI, DIVS, REMI, QUOI,
                             DIVDO, REMO, QUOO);
                             
-   input [15:0] DIVDI, DIVS, REMI, QUOI;
-   output [15:0] DIVDO, REMO, QUOO;
+   input [15:0] DIVDI, DIVS, REMI, QUOI;     // dividend_in, divisor, remainder_in, quotient_in
+   output [15:0] DIVDO, REMO, QUOO;          // dividend_out, remainder_out, quotient_out
    
-   wire [15:0] remain_tmp = (REMI << 1) | (DIVDI >> 15) & 1'b1;
-   wire condition = (remain_tmp < DIVS);
+   wire [15:0] remain_tmp = (REMI << 1) | (DIVDI >> 15) & 1'b1;         // 
+   wire condition = (remain_tmp < DIVS);                                // conditional value signaling whether to update remainder_out or not
    
-   assign QUOO = condition ? (QUOI << 1) | 1'b0 : (QUOI << 1) | 1'b1;
-   assign REMO = condition ? remain_tmp : remain_tmp - DIVS;
-   assign DIVDO = DIVDI << 1;
+   assign QUOO = condition ? (QUOI << 1) | 1'b0 : (QUOI << 1) | 1'b1;   // perform OR operation on 15-bits of the 16-bit quotient_in value with a bit-wise 0 or 1 depending on the value of the condition
+   assign REMO = condition ? remain_tmp : remain_tmp - DIVS;            // if the condition is false, update the value of remainder_out, otherwise use the remain_tmp value
+   assign DIVDO = DIVDI << 1;                                  
 endmodule 
 ```
 
-The module takes as input two 16-bit data values (dividend and divisor) and outputs two 16-bit values (remainder and quotient). It calculates using the following algorithm:
+The above division module calculates remainder and quotient using the following algorithm:
 
 ```Verilog
 int divide(int dividend, int divisor)
