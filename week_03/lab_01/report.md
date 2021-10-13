@@ -326,14 +326,11 @@ module jmp_unit (insn, pc, r1data, enable, jmp_out);
     
     reg                 subcode;
     
-    always @(enable) begin
+    always @(insn or pc or r1data or enable) begin
         subcode = insn[11];
         case(subcode)
             1'b1 : begin                // JMP
-                if (insn[10] == 1'b0)
-                    jmp_out = pc + 1'b1 + {5'b0, insn[10:0]};
-                else
-                    jmp_out = pc + 1'b1 + {5'b11111, insn[10:0]};  // denotes a negative value
+                jmp_out = pc + 1'b1 + {{5{insn[10]}}, insn[10:0]};
             end   
             
             default: jmp_out = r1data;  // JMPR
