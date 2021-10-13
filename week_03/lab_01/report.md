@@ -124,73 +124,101 @@ module lc4_alu(insn, pc, r1data, r2data, out);
    wire         [3:0]  control_out;
    
    math_unit lc4_math (insn, r1data, r2data, module_select[1], math_out);           //determines math operation outpput
-   cmp_unit lc4_cmp (insn, r1data, r2data, module_select[2], cmp_out);              //returns a comare value
+   comp_module lc4_cmp (insn, r1data, r2data, module_select[2], cmp_out);              //returns a comare value
    jsr_unit lc4_jsr (insn, pc, r1data, module_select[3], jsr_out);                  // returns JSR value
    logic_unit lc4_logic (insn, r1data, r2data, module_select[4], logic_out);        // like math_unit, insn[5:3] is subcode and insn[4:0] is imm5 for case insn[5] == 1 (ANDI)
-   shift_unit lc4_shift (insn, r1data, r2data, module_select[9], shift_out);        // return shifted value 
-   jmp_unit lc4_jump (insn, pc, r1data, r2data, module_select[10], jmp_out);        //return jump PC value 
+   barrel_shifter lc4_shift (insn, r1data, r2data, module_select[9], shift_out);        // return shifted value 
+   jmp_unit lc4_jump (insn, pc, r1data, module_select[10], jump_out);        //return jump PC value 
    
    // case to chose the output of the ALU
-   always @ (insn) begin
+   always @ (insn or pc or r1data) begin
         case(insn[15:12])
-            4'b0000: begin                                                          // BRANCH
-                        module_select = 16'b0000000000000001;
-                        case(insn[11:9])
-                            3'b000  : out = 16'b0000000000000000; 
-                            default : begin
-                                        out = pc + 1'b1 + {insn[8], insn[8], insn[8], insn[8], insn[8], insn[8], insn[8], insn[8:0]};
-                                      end
-                         endcase
-                      end
-            4'b0001: begin
-                        out = math_out;                                             // MATH unit
-                        module_select = 16'b0000000000000010;
-                     end
-            4'b0010: begin
-                        out = cmp_out;                                              // COMP unit
-                        module_select = 16'b0000000000000100;
-                     end
-            4'b0100: begin
-                        out = jsr_out;                                              // jsr unit
-                        module_select = 16'b0000000000001000;
-                     end
-            4'b0101: begin
-                        out = logic_out;                                            // LOGIC unit
-                        module_select = 16'b0000000000010000;
-                     end
-            4'b0110: begin
-                        out = r1data + {10'b0000000000, insn[5:0]};                 // ldr_out
-                        module_select = 16'b0000000000100000;
-                     end 
-            4'b0111: begin
-                        out = r1data + {10'b0000000000, insn[5:0]};                 // str_out
-                        module_select = 16'b0000000001000000;
-                     end
-            4'b1000: begin
-                        out = 16'b0;                                                // rti_unit
-                        module_select = 16'b0000000010000000;
-                     end
-            4'b1001: begin
-                        out = {7'b0, insn[8:0]};                                    // const_out
-                        module_select = 16'b0000000100000000;
-                     end
-            4'b1010: begin
-                        out = shift_out;                                            // shift_unit
-                        module_select = 16'b0000001000000000;
-                     end
-            4'b1100: begin
-                        out = jump_out;                                             // jump_unit
-                        module_select = 16'b0000010000000000;
-                     end
-            4'b1101: begin
-                        out = (r1data & 2'hFF) | (insn[7:0]<<8);                    // hi_const_out
-                        module_select = 16'b0000100000000000;
-                     end 
-            4'b1111: begin
-                        out = 4'h8000 | insn[7:0];                                  // trap_out
-                        module_select = 16'b0001000000000000;
-                     end
-            default : out = 16'b000000000000000;  
+            4'b0000: begin				// BRANCH
+            	module_select = 16'b1;
+                out = pc + 1'b1 + {insn[8], insn[8], insn[8], insn[8], insn[8], insn[8], insn[8], insn[8:0]};
+            end
+
+            4'b0001: begin				// MATH unit
+            	module_select = 16'b10;
+            	#2;
+            	out = math_out;
+            	#5;                                             
+            end
+
+            4'b0010: begin				// COMP unit
+                module_select = 16'b100;
+                #5;
+            	out = cmp_out;                                              
+                
+            end
+
+            4'b0100: begin				// JSR Unit
+                module_select = 16'b1000;
+                #5;
+                out = jsr_out;                                              
+            end
+
+            4'b0101: begin				// LOGIC Unit
+            	module_select = 16'b10000;
+            	#7;
+            	out = logic_out;                                            
+            end
+
+            4'b0110: begin				// LDR out
+		module_select = 16'b100000;
+
+		if (insn[5] == 1'b0)  // sign of out will depend on insn[5]
+                    out = r1data + insn[5:0];
+                else
+                    out = r1data + {10'h3FF, insn[5:0]};
+            end 
+            
+	    4'b0111: begin				// STR Out
+		module_select = 16'b1000000;
+
+            	if (insn[5] == 1'b0)                        
+                    out = r1data + insn[5:0];
+                else
+                    out = r1data + {10'h3FF, insn[5:0]};
+            end
+
+            4'b1000: begin				// RTI Unit
+            	out = r1data;                                                
+            	module_select = 16'b10000000;
+            end
+            
+	    4'b1001: begin				// CONST Unit
+                module_select = 16'b100000000;
+
+            	if (insn[8] == 1'b0)                // out is changed depending on sign
+                    out = { 7'b0, insn[8:0] };
+                else
+                    out = { 7'b1111111, insn[8:0] };
+	    end
+
+            4'b1010: begin				// Shift unit
+                module_select = 16'b1000000000;
+                #5;
+            	out = shift_out;                                 
+            end
+
+            4'b1100: begin				// JUMP Unit
+            	module_select = 16'b10000000000;
+            	#5
+            	out = jump_out;                                             
+            end
+
+            4'b1101: begin				// HICONST Unit
+            	out = (r1data & 16'hFF) | (insn[7:0] << 8);
+            	module_select = 16'b100000000000;
+            end 
+
+            4'b1111: begin				// TRAP Unit
+            	out = 16'h8000 | insn[7:0];                                  
+            	module_select = 16'b1000000000000;
+            end
+            
+	    default : out = 16'b0;  
         endcase
    end
 endmodule
@@ -198,32 +226,50 @@ endmodule
 // --------------------------------------------------------------------------------------------------------------------------------
 // MATH UNIT - ADD, MUL, SUB, DIV
 // --------------------------------------------------------------------------------------------------------------------------------
-module math_unit (insn, r1data, r2data, enable, math_out);
+module math_unit(insn, r1data, r2data, enable, math_out);
     input       [15:0]  insn, r1data, r2data;
     input               enable;
     output reg  [15:0]  math_out;
-    
-    reg         [4:0]   imm5;  // immediate bit
+
     reg         [2:0]   subcode;
+    wire        [15:0]  rem_out, quo_out;       
+
+    lc4_divider div01 (.dividend_in(r1data), .divisor_in(r2data), .remainder_out(rem_out), .quotient_out(quo_out));
     
-    wire        [15:0]  rem_out, quo_out;   // remainder_out and quotient_out for lc4_divider module
     
-    // instantiate the divider module to determine DIV output
-    lc4_divider div01 (.dividend_in(r1data), .divisor_in(r2data), .remainder_out(rem_out), .quotient_out(quo_out)); 
+//    initial begin
+//        math_out = 0;
+//        subcode = 0;
+//    end
     
-    always @ (*) begin 
-        subcode = insn[5:3];        
-        imm5 = insn[4:0];        // As in LC4 Register File, if insn[5] is 1, then operand is ADDI, in which case insn[4:0] contains the imm5 value
-    
-        // use subcode to determine whihc instruction operand to use for math output  
-        case (subcode) //begin
-            3'b000: math_out = r1data + r2data;
-            3'b001: math_out = r1data * r2data;
-            3'b010: math_out = r1data - r2data;
-            3'b011: math_out = quo_out;
-            default: math_out = r1data +  imm5;    // add a signed r1data with the immediate value, case insn[5] == 1
-        endcase
-    end 
+
+    always@(insn or r1data or r2data or enable) begin
+        subcode = insn[5:3];
+        if (enable == 1) begin
+            case(subcode)
+                3'b000  :   begin
+                            // ADD Rd, Rs, Rt
+                                math_out = r1data + r2data;//r1data + r2data;
+                            end
+                3'b001  :   begin
+                            // MUL Rd, Rs, Rt
+                                math_out = r1data * r2data;
+                            end
+                3'b010  :   begin
+                            // SUB Rd, Rs, Rt
+                                math_out = r1data - r2data;
+                            end
+                3'b011  :   begin
+                            // DIV Rd, Rs, Rt
+                                math_out = r1data/r2data;
+                            end
+                default :   begin
+                            // ADDI Rd, Rs, Rt
+                                math_out = r1data + {{11{insn[4]}}, insn[4:0]};
+                            end
+            endcase
+        end
+    end
 endmodule
 
 // --------------------------------------------------------------------------------------------------------------------------------
@@ -236,17 +282,16 @@ module logic_unit (insn, r1data, r2data, enable, logic_out);
     output reg  [15:0]  logic_out;
     input           enable;
 
-    reg         [5:3]   subcode;
-    reg         [4:0]   imm5; // immediate bit    
+    reg         [2:0]   subcode;  
     
-    always @ (enable) begin
+    always @ (insn or r1data or r2data or enable) begin
         subcode = insn[5:3];
         case(subcode)
             3'b000: logic_out = r1data & r2data;
             3'b001: logic_out = ~r1data;
             3'b010: logic_out = r1data | r2data;
             3'b011: logic_out = r1data ^ r2data;
-            default: logic_out = r1data & imm5;
+            default: logic_out = r1data & {{11{insn[4]}}, insn[4:0]};
         endcase
     end
 endmodule
@@ -261,13 +306,11 @@ module jsr_unit (insn, pc, r1data, enable, jsr_out);
     output reg  [15:0]  jsr_out;
     
     reg                 subcode;
-    reg         [10:0]  imm11;
     
-    always @ (enable) begin
-        subcode = insn[11];
-        case(subcode)
-            1'b0: jsr_out = (pc & 4'h8000) | (imm11 < 4);
-            default: jsr_out = r1data;
+    always @ (insn or enable or pc or r1data) begin
+        case(insn[11])
+            1'b1: jsr_out = (pc & 16'h8000) | (insn[10:0] << 4);    // JSR operation
+            default: jsr_out = r1data;                              // JSRR operation
         endcase
     end
 endmodule
@@ -275,28 +318,30 @@ endmodule
 // --------------------------------------------------------------------------------------------------------------------------------
 // JMP Unit - JMPR, JMPI
 // --------------------------------------------------------------------------------------------------------------------------------
-module jmp_unit (insn, pc, r1data, r2data, enable, jmp_out);
+module jmp_unit (insn, pc, r1data, enable, jmp_out);
     input       [15:0]  insn;
-    input       [15:0]  pc, r1data, r2data;
+    input       [15:0]  pc, r1data;
     input               enable;
     output reg  [15:0]  jmp_out;
     
     reg                 subcode;
     
-    always @(enable) begin
+    always @(insn or pc or r1data or enable) begin
         subcode = insn[11];
         case(subcode)
-            1'b0    :   jmp_out = r1data;                            // JMPR
-            default :   jmp_out = pc + 0'b1 + {5'b0, insn[10:0]};    // JMPI
+            1'b1 : begin                // JMP
+                jmp_out = pc + 1'b1 + {{5{insn[10]}}, insn[10:0]};
+            end   
+            
+            default: jmp_out = r1data;  // JMPR
         endcase
     end
 endmodule
-//endmodule
 
 // --------------------------------------------------------------------------------------------------------------------------------
 // SHIFT Unit - SLL, SRL, SRA, MOD
 // --------------------------------------------------------------------------------------------------------------------------------
-module shift_unit (insn, A, B, enable, shift_out);
+module barrel_shifter(insn, A, B, enable, shift_out);
     // Implements the 16-bit barrel shifter
     // if subcode is 2'b00 this module will perform a logical left shift, which will be the barrel shifter's normal operation
     // if subcode is 2'b01 this module will perform a logical right shift x bits, which will be a circular left shift of WIDTH-x
@@ -319,297 +364,275 @@ module shift_unit (insn, A, B, enable, shift_out);
 
     lc4_divider div01 (.dividend_in(A), .divisor_in(B), .remainder_out(rem_out), .quotient_out(quo_out)); 
 
-    always @(enable) begin
-        S = insn[3:0];
-        case(S)
-            4'b0000 :   begin   // No shift
-                            shift_out = A;
-                        end
-            4'b0001 :   begin   // Shift by 1
-                            if (insn[5:4] == 2'b00) begin           
-                                // Logical left shift
-                                shift_out = {A[14:0], 1'b0};
-                            end else begin
-                                // Logical right shift
-                                shift_out = {1'b0, A[15:1]};
-                                if (insn[5:4] == 2'b10) begin
-                                    // Arithmetic right shift
-                                    shift_out = {A[15], A[15:1]};
-                                end
-                            end
-                        end
-            4'b0010 :   begin   // Shift by 2
-                            if (insn[5:4] == 2'b00) begin           
-                                // Logical left shift
-                                shift_out = {A[13:0], 2'b0};
-                            end else begin
-                                // Logical right shift
-                                shift_out = {2'b0, A[15:2]};
-                                if (insn[5:4] == 2'b10) begin
-                                    // Arithmetic right shift
-                                    shift_out = {A[15], 1'b0, A[15:2]};
-                                end
-                            end
-                        end
-            4'b0011 :   begin   // Shift by 3
-                            if (insn[5:4] == 2'b00) begin           
-                                // Logical left shift
-                                shift_out = {A[12:0], 3'b0};
-                            end else begin
-                                // Logical right shift
-                                shift_out = {3'b0, A[15:3]};
-                                if (insn[5:4] == 2'b10) begin
-                                    // Arithmetic right shift
-                                    shift_out = {A[15], 2'b0, A[15:3]};
-                                end
-                            end
-                        end
-            4'b0100 :   begin   // Shift by 4
-                            if (insn[5:4] == 2'b00) begin           
-                                // Logical left shift
-                                shift_out = {A[11:0], 4'b0};
-                            end else begin
-                                // Logical right shift
-                                shift_out = {4'b0, A[15:4]};
-                                if (insn[5:4] == 2'b10) begin
-                                    // Arithmetic right shift
-                                    shift_out = {A[15], 3'b0, A[15:4]};
-                                end
-                            end
-                        end
-            4'b0101 :   begin   // Shift by 5
-                            if (insn[5:4] == 2'b00) begin           
-                                // Logical left shift
-                                shift_out = {A[10:0], 5'b0};
-                            end else begin
-                                // Logical right shift
-                                shift_out = {5'b0, A[15:5]};
-                                if (insn[5:4] == 2'b10) begin
-                                    // Arithmetic right shift
-                                    shift_out = {A[15], 4'b0, A[15:5]};
-                                end
-                            end
-                        end
-            4'b0110 :   begin   // Shift by 6
-                            if (insn[5:4] == 2'b00) begin           
-                                // Logical left shift
-                                shift_out = {A[9:0], 6'b0};
-                            end else begin
-                                // Logical right shift
-                                shift_out = {6'b0, A[15:6]};
-                                if (insn[5:4] == 2'b10) begin
-                                    // Arithmetic right shift
-                                    shift_out = {A[15], 5'b0, A[15:6]};
-                                end
-                            end
-                        end
-            4'b0111 :   begin   // Shift by 7
-                            if (insn[5:4] == 2'b00) begin           
-                                // Logical left shift
-                                shift_out = {A[8:0], 7'b0};
-                            end else begin
-                                // Logical right shift
-                                shift_out = {7'b0, A[15:8]};
-                                if (insn[5:4] == 2'b10) begin
-                                    // Arithmetic right shift
-                                    shift_out = {A[15], 6'b0, A[15:7]};
-                                end
-                            end
-                        end
-            4'b1000 :   begin   // Shift by 8
-                            if (insn[5:4] == 2'b00) begin           
-                                // Logical left shift
-                                shift_out = {A[7:0], 8'b0};
-                            end else begin
-                                // Logical right shift
-                                shift_out = {8'b0, A[15:8]};
-                                if (insn[5:4] == 2'b10) begin
-                                    // Arithmetic right shift
-                                    shift_out = {A[15], 7'b0, A[15:8]};
-                                end
-                            end
-                        end
-            4'b1001 :   begin   // Shift by 9
-                            if (insn[5:4] == 2'b00) begin           
-                                // Logical left shift
-                                shift_out = {A[6:0], 9'b0};
-                            end else begin
-                                // Logical right shift
-                                shift_out = {9'b0, A[15:9]};
-                                if (insn[5:4] == 2'b10) begin
-                                    // Arithmetic right shift
-                                    shift_out = {A[15], 8'b0, A[15:9]};
-                                end
-                            end
-                        end
-            4'b1010 :   begin   // Shift by 10
-                            if (insn[5:4] == 2'b00) begin           
-                                // Logical left shift
-                                shift_out = {A[5:0], 10'b0};
-                            end else begin
-                                // Logical right shift
-                                shift_out = {10'b0, A[15:10]};
-                                if (insn[5:4] == 2'b10) begin
-                                    // Arithmetic right shift
-                                    shift_out = {A[15], 9'b0, A[15:10]};
-                                end
-                            end
-                        end
-            4'b1011 :   begin   // Shift by 11
-                            if (insn[5:4] == 2'b00) begin           
-                                // Logical left shift
-                                shift_out = {A[4:0], 11'b0};
-                            end else begin
-                                // Logical right shift
-                                shift_out = {11'b0, A[15:11]};
-                                if (insn[5:4] == 2'b10) begin
-                                    // Arithmetic right shift
-                                    shift_out = {A[15], 10'b0, A[15:11]};
-                                end
-                            end
-                        end
-            4'b1100 :   begin   // Shift by 12
-                            if (insn[5:4] == 2'b00) begin           
-                                // Logical left shift
-                                shift_out = {A[3:0], 12'b0};
-                            end else begin
-                                // Logical right shift
-                                shift_out = {12'b0, A[15:12]};
-                                if (insn[5:4] == 2'b10) begin
-                                    // Arithmetic right shift
-                                    shift_out = {A[15], 11'b0, A[15:11]};
-                                end
-                            end
-                        end
-            4'b1101 :   begin   // Shift by 13
-                            if (insn[5:4] == 2'b00) begin           
-                                // Logical left shift
-                                shift_out = {A[2:0], 13'b0};
-                            end else begin
-                                // Logical right shift
-                                shift_out = {13'b0, A[15:13]};
-                                if (insn[5:4] == 2'b10) begin
-                                    // Arithmetic right shift
-                                    shift_out = {A[15], 12'b0, A[15:13]};
-                                end
-                            end
-                        end
-            4'b1110 :   begin   // Shift by 14
-                            if (insn[5:4] == 2'b00) begin           
-                                // Logical left shift
-                                shift_out = {A[1:0], 14'b0};
-                            end else begin
-                                // Logical right shift
-                                shift_out = {14'b0, A[15:14]};
-                                if (insn[5:4] == 2'b10) begin
-                                    // Arithmetic right shift
-                                    shift_out = {A[15], 13'b0, A[15:14]};
-                                end
-                            end
-                        end
-            4'b1111 :   begin   // Shift by 15
-                            if (insn[5:4] == 2'b00) begin           
-                                // Logical left shift
-                                shift_out = {A[0], 15'b0};
-                            end else begin
-                                // Logical right shift
-                                shift_out = {15'b0, A[15]};
-                                if (insn[5:4] == 2'b10) begin
-                                    // Arithmetic right shift
-                                    shift_out = {A[15], 14'b0, A[15]};
-                                end
-                            end
-                        end
-            default :   shift_out = rem_out;  // Default modulo
+    always @(insn or enable or A or B)  begin
+        case(insn[5:4])
+            3'b00:      shift_out = A << (insn[3:0]);
+            3'b01:      shift_out = $signed(A) >>> (insn[3:0]);
+            3'b10:      shift_out = A >> (insn[3:0]);
+            default:    shift_out = A % B;
         endcase
+//        S = insn[3:0];
+//        case(S)
+//            4'b0000 :   begin   // No shift
+//                            shift_out = A;
+//                        end
+//            4'b0001 :   begin   // Shift by 1
+//                            if (insn[5:4] == 2'b00) begin           
+//                                // Logical left shift
+//                                shift_out = {A[14:0], 1'b0};
+//                            end else begin
+//                                // Logical right shift
+//                                shift_out = {1'b0, A[15:1]};
+//                                if (insn[5:4] == 2'b10) begin
+//                                    // Arithmetic right shift
+//                                    shift_out = {A[15], A[15:1]};
+//                                end
+//                            end
+//                        end
+//            4'b0010 :   begin   // Shift by 2
+//                            if (insn[5:4] == 2'b00) begin           
+//                                // Logical left shift
+//                                shift_out = {A[13:0], 2'b0};
+//                            end else begin
+//                                // Logical right shift
+//                                shift_out = {2'b0, A[15:2]};
+//                                if (insn[5:4] == 2'b10) begin
+//                                    // Arithmetic right shift
+//                                    shift_out = {A[15], 1'b0, A[15:2]};
+//                                end
+//                            end
+//                        end
+//            4'b0011 :   begin   // Shift by 3
+//                            if (insn[5:4] == 2'b00) begin           
+//                                // Logical left shift
+//                                shift_out = {A[12:0], 3'b0};
+//                            end else begin
+//                                // Logical right shift
+//                                shift_out = {3'b0, A[15:3]};
+//                                if (insn[5:4] == 2'b10) begin
+//                                    // Arithmetic right shift
+//                                    shift_out = {A[15], 2'b0, A[15:3]};
+//                                end
+//                            end
+//                        end
+//            4'b0100 :   begin   // Shift by 4
+//                            if (insn[5:4] == 2'b00) begin           
+//                                // Logical left shift
+//                                shift_out = {A[11:0], 4'b0};
+//                            end else begin
+//                                // Logical right shift
+//                                shift_out = {4'b0, A[15:4]};
+//                                if (insn[5:4] == 2'b10) begin
+//                                    // Arithmetic right shift
+//                                    shift_out = {A[15], 3'b0, A[15:4]};
+//                                end
+//                            end
+//                        end
+//            4'b0101 :   begin   // Shift by 5
+//                            if (insn[5:4] == 2'b00) begin           
+//                                // Logical left shift
+//                                shift_out = {A[10:0], 5'b0};
+//                            end else begin
+//                                // Logical right shift
+//                                shift_out = {5'b0, A[15:5]};
+//                                if (insn[5:4] == 2'b10) begin
+//                                    // Arithmetic right shift
+//                                    shift_out = {A[15], 4'b0, A[15:5]};
+//                                end
+//                            end
+//                        end
+//            4'b0110 :   begin   // Shift by 6
+//                            if (insn[5:4] == 2'b00) begin           
+//                                // Logical left shift
+//                                shift_out = {A[9:0], 6'b0};
+//                            end else begin
+//                                // Logical right shift
+//                                shift_out = {6'b0, A[15:6]};
+//                                if (insn[5:4] == 2'b10) begin
+//                                    // Arithmetic right shift
+//                                    shift_out = {A[15], 5'b0, A[15:6]};
+//                                end
+//                            end
+//                        end
+//            4'b0111 :   begin   // Shift by 7
+//                            if (insn[5:4] == 2'b00) begin           
+//                                // Logical left shift
+//                                shift_out = {A[8:0], 7'b0};
+//                            end else begin
+//                                // Logical right shift
+//                                shift_out = {7'b0, A[15:8]};
+//                                if (insn[5:4] == 2'b10) begin
+//                                    // Arithmetic right shift
+//                                    shift_out = {A[15], 6'b0, A[15:7]};
+//                                end
+//                            end
+//                        end
+//            4'b1000 :   begin   // Shift by 8
+//                            if (insn[5:4] == 2'b00) begin           
+//                                // Logical left shift
+//                                shift_out = {A[7:0], 8'b0};
+//                            end else begin
+//                                // Logical right shift
+//                                shift_out = {8'b0, A[15:8]};
+//                                if (insn[5:4] == 2'b10) begin
+//                                    // Arithmetic right shift
+//                                    shift_out = {A[15], 7'b0, A[15:8]};
+//                                end
+//                            end
+//                        end
+//            4'b1001 :   begin   // Shift by 9
+//                            if (insn[5:4] == 2'b00) begin           
+//                                // Logical left shift
+//                                shift_out = {A[6:0], 9'b0};
+//                            end else begin
+//                                // Logical right shift
+//                                shift_out = {9'b0, A[15:9]};
+//                                if (insn[5:4] == 2'b10) begin
+//                                    // Arithmetic right shift
+//                                    shift_out = {A[15], 8'b0, A[15:9]};
+//                                end
+//                            end
+//                        end
+//            4'b1010 :   begin   // Shift by 10
+//                            if (insn[5:4] == 2'b00) begin           
+//                                // Logical left shift
+//                                shift_out = {A[5:0], 10'b0};
+//                            end else begin
+//                                // Logical right shift
+//                                shift_out = {10'b0, A[15:10]};
+//                                if (insn[5:4] == 2'b10) begin
+//                                    // Arithmetic right shift
+//                                    shift_out = {A[15], 9'b0, A[15:10]};
+//                                end
+//                            end
+//                        end
+//            4'b1011 :   begin   // Shift by 11
+//                            if (insn[5:4] == 2'b00) begin           
+//                                // Logical left shift
+//                                shift_out = {A[4:0], 11'b0};
+//                            end else begin
+//                                // Logical right shift
+//                                shift_out = {11'b0, A[15:11]};
+//                                if (insn[5:4] == 2'b10) begin
+//                                    // Arithmetic right shift
+//                                    shift_out = {A[15], 10'b0, A[15:11]};
+//                                end
+//                            end
+//                        end
+//            4'b1100 :   begin   // Shift by 12
+//                            if (insn[5:4] == 2'b00) begin           
+//                                // Logical left shift
+//                                shift_out = {A[3:0], 12'b0};
+//                            end else begin
+//                                // Logical right shift
+//                                shift_out = {12'b0, A[15:12]};
+//                                if (insn[5:4] == 2'b10) begin
+//                                    // Arithmetic right shift
+//                                    shift_out = {A[15], 11'b0, A[15:11]};
+//                                end
+//                            end
+//                        end
+//            4'b1101 :   begin   // Shift by 13
+//                            if (insn[5:4] == 2'b00) begin           
+//                                // Logical left shift
+//                                shift_out = {A[2:0], 13'b0};
+//                            end else begin
+//                                // Logical right shift
+//                                shift_out = {13'b0, A[15:13]};
+//                                if (insn[5:4] == 2'b10) begin
+//                                    // Arithmetic right shift
+//                                    shift_out = {A[15], 12'b0, A[15:13]};
+//                                end
+//                            end
+//                        end
+//            4'b1110 :   begin   // Shift by 14
+//                            if (insn[5:4] == 2'b00) begin           
+//                                // Logical left shift
+//                                shift_out = {A[1:0], 14'b0};
+//                            end else begin
+//                                // Logical right shift
+//                                shift_out = {14'b0, A[15:14]};
+//                                if (insn[5:4] == 2'b10) begin
+//                                    // Arithmetic right shift
+//                                    shift_out = {A[15], 13'b0, A[15:14]};
+//                                end
+//                            end
+//                        end
+//            4'b1111 :   begin   // Shift by 15
+//                            if (insn[5:4] == 2'b00) begin           
+//                                // Logical left shift
+//                                shift_out = {A[0], 15'b0};
+//                            end else begin
+//                                // Logical right shift
+//                                shift_out = {15'b0, A[15]};
+//                                if (insn[5:4] == 2'b10) begin
+//                                    // Arithmetic right shift
+//                                    shift_out = {A[15], 14'b0, A[15]};
+//                                end
+//                            end
+//                        end
+//            default :   shift_out = rem_out;  // Default modulo
+//        endcase
     end
 endmodule
 
 // --------------------------------------------------------------------------------------------------------------------------------
 // COMP Unit - CMP, CMPU, CMPI, CMPIU
 // --------------------------------------------------------------------------------------------------------------------------------
-module cmp_unit (insn, r1data, r2data, enable, cmp_out);
+module comp_module (insn, r1data, r2data, enable, cmp_out);
     input       [15:0]  insn, r1data, r2data;
     input               enable; 
     output reg  [15:0]  cmp_out;
     
-    reg         [16:0]  r1sign, r2sign, immsign; //signed registers with room for overflowo
-    reg                 result; //sign of the result
+    reg  signed [16:0]  r1sign, r2sign, immsign, result; //signed registers with room for overflowo
     
-   always @ (enable) begin    //instruction and enable bit
-      case(insn[8:7])   //chose case
-        2'b00: begin    //compare signed registers
-                    r1sign = {r1data[15], 1'b0, r1data[14:0]}; //shift sign and make room for overflow
-                    r2sign = {r2data[15], 1'b0, r2data[14:0]}; 
-                    if (r2sign[16] == r1sign[16]) //if the signs of our numbers are the same
-                         if ((r2sign[15:0]>r1sign[15:0])) begin //if the second register has a greater abs val
-                            result = !r2sign[16]; //resulting sign will be opposite of larger value
-                            if (result == 0) // if positive number
-                                cmp_out = 16'b00000000000000001;
-                            else //if negative number
-                                cmp_out = 16'b1111111111111111;
-                         end else if ((r2sign[15:0]<r1sign[15:0])) begin //if first register has greater absval
-                            result = r1sign[16]; //sign is first register
-                            if (result == 0) //if positive number
-                                cmp_out = 16'b00000000000000001;
-                            else //if negative number
-                                cmp_out = 16'b1111111111111111;
-                         end else //if abs vals are equal
-                            cmp_out = 16'b000000000000000000;
-                    else //if they have differing signs
-                            result = r1sign[16]; //sign of first register
-                            if (result == 0) //positive number
-                                cmp_out = 16'b00000000000000001; 
-                            else //negative number
-                                cmp_out = 16'b1111111111111111;
-                             // no case for them being equal because signs are different
-                end         
-        2'b01: //unsigned register ops
-                begin 
-                    if ((r1data - r2data)>0) //if first register is bigger
-                        cmp_out = 16'b0000000000000001;
-                    else if ((r1data - r2data < 0))
-                        cmp_out = 16'b1;
-                    else  
+    
+   always @ (insn)   //enable bit
+      case(insn[8:7]) //choose case
+        2'b00: begin //compare signed registers
+                    r1sign = {r1data[15], 1'b0, r1data[14:0]}; //sign extend for overflow
+                    r2sign = {r2data[15], 1'b0, r2data[14:0]};
+                    result = ($signed(r1sign)-$signed(r2sign)); //compare values
+                    if(r1sign == r2sign) //if equal
                         cmp_out = 16'b0; 
-                end   
+                    else if (r1sign >r2sign)
+                        cmp_out = 16'b1;
+                    else
+                        cmp_out = 16'hFFFF;
+                        
+                    //cmp_out = {result[16], result[16],result[16],result[16],result[16],result[16],result[16],result[16],result[16],result[16],result[16],result[16],result[16],result[16],result[16],1'b1};
+                  //cmp_out = result;
+                end        
+        2'b01: begin //unsigned register compare
+                    r1sign = {1'b0, r1data}; //unsigned extend for overflow
+                    r2sign = {1'b0, r2data};
+                    result = $signed(r1sign)-$signed(r2sign); //compare values and sign value
+                    
+                    if ((r1data == r2data))
+                        cmp_out = 16'b0;     
+                    else cmp_out = {result[16], result[16],result[16],result[16],result[16],result[16],result[16],result[16],result[16],result[16],result[16],result[16],result[16],result[16],result[16],1'b1};
+
+                 //   cmp_out = result; 
+                end    
         2'b10: begin //compare signed register and immediate value
-                    r1sign = {r1data[15], 1'b0, r1data[14:0]};
-                    immsign = {insn[6], 10'b0, insn[5:0]}; 
-                    if (immsign[16] == r1sign[16])
-                         if ((immsign[15:0]>r1sign[15:0])) begin
-                            result = !immsign[16];
-                            if (result == 0)
-                                cmp_out = 16'b00000000000000001;
-                            else
-                                cmp_out = 16'b1111111111111111;
-                         end else if ((immsign[15:0]<r1sign[15:0])) begin
-                            result = r1sign[16];
-                            if (result == 0)
-                                cmp_out = 16'b00000000000000001;
-                            else
-                                cmp_out = 16'b1111111111111111;
-                         end else 
-                            cmp_out = 16'b000000000000000000;
-                    else begin
-                            result = r1sign[16];
-                            if (result == 0)
-                                cmp_out = 16'b00000000000000001;
-                            else
-                                cmp_out = 16'b1111111111111111;
-                    end  
+                    r1sign = {r1data[15],1'b0,  r1data[14:0]}; //sign extend for overflow
+                    immsign = insn[6:0];
+                    result = $signed(r1sign)-$signed(immsign); //compare values
+                    if(r1sign == immsign) //if equal
+                        cmp_out = 16'b0; 
+                    else cmp_out = {result[16], result[16],result[16],result[16],result[16],result[16],result[16],result[16],result[16],result[16],result[16],result[16],result[16],result[16],result[16],1'b1};
+                //else   cmp_out = result;   
                 end   
-        2'b11: begin                                     //unsigned immediate compare
-                    if ((r1data - insn[6:0])>0)
-                        cmp_out = 16'b0000000000000001;
-                    else if ((r1data - insn[6:0] < 0))
+        2'b11: begin //unsigned immediate compare
+                    if ((r1data > insn[6:0]))
+                        cmp_out = {15'b0,1'b1};
+                    else if ((r1data < insn[6:0]))
                         cmp_out = 16'b1;
                     else  
                     cmp_out = 16'b0; 
                 end   
-        default: cmp_out = 16'b0000000000000001;
+        default: cmp_out = 16'b0;
       endcase
-   end
 endmodule
 ```
 # Questions
