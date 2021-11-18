@@ -1,5 +1,5 @@
 ---
-title: "Assignment 1: ALU"
+title: "Report 1: ALU"
 date: 2021-10-03
 type: book
 commentable: true
