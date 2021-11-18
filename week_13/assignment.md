@@ -205,3 +205,69 @@ You have the freedom to implement the datapath and control any which way you wan
 ## Debugging Your Processor
 ### Using Trace Simulation
 A good way to debug your design is using behavioral simulation and comparison with a trace. The `code/` subdirectory in the `labfiles/` folder contains several `.hex` and `.trace` files. the `.hex` files are memory dumps of various programs. For example, [house.hex](https://github.com/gustybear-teaching/course_ee660_2021_fall/raw/main/week_13/files/house.hex) is a memory dump of a small non-interactive program that draws the missile command houses on the screen and then exits. `house.trace` is a trace of that program created by PennSim.
+
+A trace file is a text file containing one line per instruction executed, each with the same fields:
+
+- The PC of the instruction
+- The instruction bits themselves
+- regfile_we. A bit that indicates if the instruction writes a register
+- regfile_reg. The register written by the instruction (if the instruction writes a register)
+- regfile_in. The value written to the register file (if the instruction writes a register)
+- nzp_we. A bit that indicates if the instruction writes the condition codes (NZP)
+- nzp_in. The new NZP bits (if the instruction writes the condition codes)
+- dmem_we. A bit that indicates if the instruction writes memory
+- dmem_addr. A value of the address accessed by a load or store
+- dmem_value. A value that is written to memory (for stores) or read from memory (loads)
+
+The Verilog test fixture [test_lc4_processor.tf]((https://github.com/gustybear-teaching/course_ee660_2021_fall/raw/main/week_13/files/test_lc4_processor.tf) reads the `.trace` file, simulates the processor executing the `.hex` program instruction-by-instruction. When executing, it then compares the `lc4_processor` module interface signals to the corresponding fields in the trace file, allowing you to debug your implementation instruction by instruction.
+
+The `.hex` file used to initialize the memory is specified in `include/bram.v`. Using a different `.hex` file requires editing the value of the `MEMORY_IMAGE_FILE` macro at the top of the memory module `bram.v`. This memory module is used both for simulation and for synthesis, so if you change it in one place it will affect the other.
+
+The `labfiles/` contain several tests, which we recommend you use to test your design in the following order:
+
+- test_alu.trace
+- test_br.trace
+- test_mem.trace
+- test_all.trace
+- house.trace
+
+The newest versions of [PennSim.jar](https://github.com/gustybear-teaching/course_ee660_2021_fall/raw/main/week_13/files/PennSim.jar) also allows loading of .hex files directly using the new "loadhex" command. Just type in "loadhex house.hex" in the command line, for example. This will let you single-step through the execution in PennSim during your debugging.
+
+### Creating Your Own Tests
+The [house.hex](https://github.com/gustybear-teaching/course_ee660_2021_fall/raw/main/week_13/files/house.hex) file was created on PennSim by first loading the object files (`ld mcux` and `ld house`) and then using the command: `dump -readmemh x0000 xFFFF house.hex`. The `house.trace` file was created on PennSim using the commands `trace on house.trace`, then break set `OS_START`, `continue` and then `trace off`. You can write your own tests and create your own memory images and trace files in a similar way. You'll need the most recent version of [PennSim.jar](https://github.com/gustybear-teaching/course_ee660_2021_fall/raw/main/week_13/files/PennSim.jar).
+
+### Debugging using Board Single-Stepping
+Depending on how you count the processor executes at either 100MHz or 25MHz, but either speed is too fast to debug. You can use the expansion board to put the processor into "single-stepping" mode. Switch 8 controls clock mode: up is "auto", down is "single-step". To step the clock one cycle forward, use the down button on the main board.
+
+When single-stepping through the program, the other expansion board switches determine what value is displayed on the expansion board 7-segment display. What is display is determined by the code at the end of your processor module:
+
+```Verilog
+assign seven_segment_data = (switch_data[6:0] == 7'd0) ? pc :
+                            (switch_data[6:0] == 7'd1) ? imem_out :
+                            (switch_data[6:0] == 7'd2) ? dmem_addr :
+                            (switch_data[6:0] == 7'd3) ? dmem_out :
+                            (switch_data[6:0] == 7'd4) ? dmem_in :
+                            /*else*/ 16'hDEAD;
+```
+
+For instance, when the switches are set to 0 (i.e., all switches down) the 7-segment display shows the value currently on the pc bus, i.e., the program counter. You can also expand this code to get additional debugging info.
+
+## Verilog Restrictions
+This synthesizable part of this lab should be implemented using the structural and behavioral Verilog subset. The only state element you are allowed to use for synthesis is *Nbit_reg* in [lc4_regfile.v](https://github.com/gustybear-teaching/course_ee660_2021_fall/raw/main/week_13/files/lc4_regfile.v). You are allowed to use behavioral Verilog only in test fixtures. 
+
+## Demos
+You'll demonstrate that your design works using both simulation and the hardware boards:
+
+- Simulation: You'll demonstrate that your design works in simulation for all the test cases we provided.
+- Full Processor Hardware: You'll demonstrate that your design works correctly on your board using the [invaders.hex](https://github.com/gustybear-teaching/course_ee660_2021_fall/raw/main/week_13/files/invaders.hex) and [tetris.hex](https://github.com/gustybear-teaching/course_ee660_2021_fall/raw/main/week_13/files/tetris.hex) files.
+
+## What to Turn In
+Turn in a report via GitHub:
+
+- Verilog Code: Your writeup should include Verilog code for the main modules and any sub-modules you created. But not the Verilog code we gave, just the code you wrote. Your Verilog code should be well-formatted, easy to understand, and include comments where appropriate (for example, use comments to describe the inputs and outputs to your Verilog modules). Some part of the project grade will be dependent on the style and readability of your Verilog, including formatting, comments, good signal names, and proper use of hierarchy.
+- Questions: Answer the following questions:
+  - Once you had the design working in simulation, did you encounter any problems getting it to run on the FPGA boards? If so, what problems did you encounter?
+  - What other problems, if any, did you encounter while doing this lab?
+  - How many hours did it take you to complete this assignment?
+  - On a scale of 1 (least) to 5 (most), how difficult was this assignment?
+  - What was the group division of labor on this assignment, in both hours and functional and debugging tasks?
