@@ -219,7 +219,7 @@ A trace file is a text file containing one line per instruction executed, each w
 - dmem_addr. A value of the address accessed by a load or store
 - dmem_value. A value that is written to memory (for stores) or read from memory (loads)
 
-The Verilog test fixture [test_lc4_processor.tf]((https://github.com/gustybear-teaching/course_ee660_2021_fall/raw/main/week_13/files/test_lc4_processor.tf) reads the `.trace` file, simulates the processor executing the `.hex` program instruction-by-instruction. When executing, it then compares the `lc4_processor` module interface signals to the corresponding fields in the trace file, allowing you to debug your implementation instruction by instruction.
+The Verilog test fixture [test_lc4_processor.tf](https://github.com/gustybear-teaching/course_ee660_2021_fall/raw/main/week_13/files/test_lc4_processor.tf) reads the `.trace` file, simulates the processor executing the `.hex` program instruction-by-instruction. When executing, it then compares the `lc4_processor` module interface signals to the corresponding fields in the trace file, allowing you to debug your implementation instruction by instruction.
 
 The `.hex` file used to initialize the memory is specified in `include/bram.v`. Using a different `.hex` file requires editing the value of the `MEMORY_IMAGE_FILE` macro at the top of the memory module `bram.v`. This memory module is used both for simulation and for synthesis, so if you change it in one place it will affect the other.
 
