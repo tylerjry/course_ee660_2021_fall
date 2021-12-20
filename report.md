@@ -158,12 +158,21 @@ $finish called at time : 10217 ns : File "C:/Users/niwc/Documents/School - Yamau
 
 # Questions
 1. Once you had the design working in simulation, did you encounter any problems getting it to run on the FPGA boards? If so, what problems did you encounter?
+
+      We were unable to get our code working with the FPGA in time.
+
 2. What other problems, if any, did you encounter while doing this lab?
+      
+      The biggest difficulty was figuring out what some of the named wires/registers are for as they aren't all super clearly named/commented in the lab code. A wire/port diagram of the "lc4_system" file would have helped deliniate those processes from the "processor" we were wokring on. That said, we realize system connects to multiple resources so we understand why that was not created.
+
 3. How many hours did it take you to complete this assignment?
   
     Breakdown given below.
   
 4. On a scale of 1 (least) to 5 (most), how difficult was this assignment?
+      
+    This assignment was a 5 difficulty, mostly because of the complexity and the amount of different parts there were to get everything to work.
+
 5. What was the group division of labor on this assignment, in both hours and functional and debugging tasks?
     
     Christian: 
